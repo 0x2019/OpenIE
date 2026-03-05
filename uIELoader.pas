@@ -1,16 +1,10 @@
-﻿unit uExt;
+﻿unit uIELoader;
 
 interface
 
 uses
   Winapi.Windows, Winapi.KnownFolders, System.SysUtils, System.Variants, ActiveX,
   ComObj, ShellAPI, SHDocVw, ShlObj;
-
-function RtlGetVersion(var RTL_OSVERSIONINFOEXW): LONG; stdcall; external 'ntdll.dll' Name 'RtlGetVersion';
-function IsWindowsVersionLower(Major, Minor, Build: DWORD): Boolean;
-
-function Wow64DisableWow64FsRedirection(var OldValue: Pointer): BOOL; stdcall; external 'kernel32.dll';
-function Wow64RevertWow64FsRedirection(OldValue: Pointer): BOOL; stdcall; external 'kernel32.dll';
 
 function IE_OpenWithURL(const InputURL: string): Boolean;
 procedure IE_OpenGoogle;
@@ -27,26 +21,9 @@ function GetProgramFilesDirX86: string;
 
 implementation
 
-function IsWindowsVersionLower(Major, Minor, Build: DWORD): Boolean;
-var
-  winver: RTL_OSVERSIONINFOEXW;
-begin
-  FillChar(winver, SizeOf(winver), 0);
-  winver.dwOSVersionInfoSize := SizeOf(winver);
-  Result := False;
-  if RtlGetVersion(winver) = 0 then
-  begin
-    if winver.dwMajorVersion < Major then
-      Exit(True);
-    if winver.dwMajorVersion = Major then
-    begin
-      if winver.dwMinorVersion < Minor then
-        Exit(True);
-      if winver.dwMinorVersion = Minor then
-        Exit(winver.dwBuildNumber < Build);
-    end;
-  end;
-end;
+uses
+  uOSUtils,
+  uAppStrings;
 
 function GetProgramFilesDirX64: string;
 var
@@ -134,32 +111,35 @@ end;
 
 function IE_CreateProcess: Boolean;
 var
-  OldFsRedirState: Pointer;
-  FsRedirDisabled: BOOL;
-  ExecInfo: TShellExecuteInfoW;
-  IEPath: string;
+  Success: Boolean;
 begin
-  FsRedirDisabled := Wow64DisableWow64FsRedirection(OldFsRedirState);
-  try
-    ZeroMemory(@ExecInfo, SizeOf(ExecInfo));
-    ExecInfo.cbSize := SizeOf(ExecInfo);
-    ExecInfo.lpVerb := 'open';
+  Success := False;
 
-    IEPath := IncludeTrailingPathDelimiter(GetProgramFilesDirX64) + 'Internet Explorer\iexplore.exe';
-    if not FileExists(IEPath) then
-      IEPath := IncludeTrailingPathDelimiter(GetProgramFilesDirX86) + 'Internet Explorer\iexplore.exe';
+  DisableWow64FsRedirection(
+    procedure
+    var
+      ExecInfo: TShellExecuteInfoW;
+      IEPath: string;
+    begin
+      ZeroMemory(@ExecInfo, SizeOf(ExecInfo));
+      ExecInfo.cbSize := SizeOf(ExecInfo);
+      ExecInfo.lpVerb := 'open';
 
-    if not FileExists(IEPath) then
-      Exit(False);
+      IEPath := IncludeTrailingPathDelimiter(GetProgramFilesDirX64) + 'Internet Explorer\iexplore.exe';
+      if not FileExists(IEPath) then
+        IEPath := IncludeTrailingPathDelimiter(GetProgramFilesDirX86) + 'Internet Explorer\iexplore.exe';
 
-    ExecInfo.lpFile       := PWideChar(IEPath);
-    ExecInfo.lpParameters := PWideChar('-embedding -nomerge about:blank');
-    ExecInfo.nShow        := SW_SHOWNORMAL;
-    Result := ShellExecuteExW(@ExecInfo);
-  finally
-    if FsRedirDisabled then
-      Wow64RevertWow64FsRedirection(OldFsRedirState);
-  end;
+      if FileExists(IEPath) then
+      begin
+        ExecInfo.lpFile       := PWideChar(IEPath);
+        ExecInfo.lpParameters := PWideChar('-embedding -nomerge about:blank');
+        ExecInfo.nShow        := SW_SHOWNORMAL;
+        Success := ShellExecuteExW(@ExecInfo);
+      end;
+    end
+  );
+
+  Result := Success;
 end;
 
 function IE_FindInstance(out WB: IWebBrowser2; const TimeMS: DWORD = 3000): Boolean;
@@ -251,7 +231,7 @@ begin
     end
     else
     begin
-      MessageBox(0, 'Internet Explorer 가 존재하지 않거나 실행할 수 없습니다.', 'Error', MB_ICONERROR or MB_OK);
+      MessageBox(0, PChar(SIENotFoundMsg), PChar(SErrorCaption), MB_ICONERROR or MB_OK);
     end;
   finally
     CoUninitialize;

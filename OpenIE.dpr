@@ -1,16 +1,18 @@
 ﻿program OpenIE;
 
 uses
-  Winapi.Windows, System.SysUtils,
-  uExt in 'uExt.pas';
+  Winapi.Windows,
+  System.SysUtils,
+  uOSUtils,
+  uAppStrings in 'uAppStrings.pas',
+  uIELoader in 'uIELoader.pas';
 
-{$O+} {$SetPEFlags IMAGE_FILE_RELOCS_STRIPPED}
 {$R *.res}
 
 begin
-  if IsWindowsVersionLower(10, 0, 0) then
+  if not IsWindowsVersionOrGreater(10, 0, 0) then
   begin
-    MessageBox(0, '이 프로그램은 Windows 10 이상에서만 실행됩니다.', 'Error', MB_ICONERROR or MB_OK);
+    MessageBox(0, PChar(SWin10RequiredMsg), PChar(SErrorCaption), MB_ICONERROR or MB_OK);
     Halt(1);
   end;
 
